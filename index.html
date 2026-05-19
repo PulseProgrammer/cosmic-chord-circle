@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cosmic Chord Circle</title>
+  <link rel="stylesheet" href="static/css/style.css" />
+</head>
+<body>
+
+  <!-- ── Full-screen Canvas ── -->
+  <canvas id="cosmos"></canvas>
+
+  <!-- ── Right Collapsible Panel ── -->
+  <div id="panel">
+    <button id="panel-toggle" title="Toggle panel">⟨</button>
+
+    <div class="panel-content">
+      <h2 class="panel-title">Harmony Settings</h2>
+
+      <!-- Root / Tonic -->
+      <section class="panel-section">
+        <label class="section-label">Root / Tonic</label>
+        <div class="tonic-grid" id="tonic-grid"></div>
+        <p class="hint-text">Sets the key center when a scale is active.</p>
+      </section>
+
+      <div class="panel-divider"></div>
+
+      <!-- Scale / Mode -->
+      <section class="panel-section">
+        <label class="section-label">Scale / Mode</label>
+        <select id="scale-select" class="cosmic-select">
+          <!-- populated by app.js -->
+        </select>
+        <p class="hint-text">Dims out-of-scale nodes and auto-assigns chord qualities per degree.</p>
+      </section>
+
+      <div class="panel-divider"></div>
+
+      <!-- Currently Playing -->
+      <section class="panel-section">
+        <label class="section-label">Now Playing</label>
+        <div class="chord-display">
+          <span id="chord-name">—</span>
+          <span id="chord-notes">Click any node to play</span>
+        </div>
+      </section>
+
+      <div class="panel-divider"></div>
+
+      <!-- Volume -->
+      <section class="panel-section">
+        <label class="section-label">Volume</label>
+        <div class="volume-row">
+          <span>-30 dB</span>
+          <input
+            type="range"
+            id="volume-slider"
+            class="cosmic-slider"
+            min="-30"
+            max="0"
+            step="1"
+            value="-8"
+          />
+          <span>0 dB</span>
+        </div>
+      </section>
+
+      <div class="panel-divider"></div>
+
+      <!-- Usage hint -->
+      <section class="panel-section">
+        <label class="section-label">How to Use</label>
+        <p class="hint-text">
+          Hover any note to reveal its chord universe — satellites orbit outward like neuron branches.<br><br>
+          <strong style="color:var(--text-primary)">Inner ring</strong> — Triads (maj, min, aug, dim, sus)<br>
+          <strong style="color:var(--text-primary)">Middle ring</strong> — 7th chords<br>
+          <strong style="color:var(--text-primary)">Outer ring</strong> — 9ths, 11ths, 13ths<br><br>
+          Click any node or satellite to play.<br>
+          Click again or press <kbd>Space</kbd> to stop.
+        </p>
+      </section>
+    </div>
+  </div>
+
+  <!-- Tone.js — warm pad synthesis engine -->
+  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+
+  <!-- App modules (order matters) -->
+  <script src="static/js/theory.js"></script>
+  <script src="static/js/audio.js"></script>
+  <script src="static/js/canvas.js"></script>
+  <script src="static/js/app.js"></script>
+
+</body>
+</html>

@@ -36,6 +36,8 @@ class CosmicCanvas {
     this.satellites     = [];
     this.hoveredSat     = null;
     this._collapseTimer = null;
+    this._touchMode     = false;
+    this._panelOffsetY  = 0;
 
     this.activeScaleSet = null;
     this.mouseX = -9999;
@@ -66,16 +68,19 @@ class CosmicCanvas {
     this.W = this.canvas.offsetWidth;
     this.H = this.canvas.offsetHeight;
 
-    const isMobile = this.W <= 640;
+    // Portrait mobile: W<=640. Landscape mobile: small H (phone rotated sideways)
+    const isMobile = this.W <= 640 || (this.H <= 500 && this.W <= 1024);
     const panelEl = document.getElementById('panel');
     const panelCollapsed = panelEl?.classList.contains('collapsed') ?? false;
     // When panel is open offset centre leftward; when collapsed use full canvas
     const panelOffsetX = (isMobile || panelCollapsed) ? 0 : PANEL_W_DESKTOP;
-    const panelOffsetY = isMobile ? Math.min(this.H * 0.38, 280) : 0;
+    // Mobile panel is a bottom sheet; reserve less when collapsed (only 44px nub shows)
+    const panelOffsetY = isMobile ? (panelCollapsed ? 44 : Math.min(this.H * 0.42, 320)) : 0;
+    this._panelOffsetY = panelOffsetY;
 
     this.targetCx         = (this.W - panelOffsetX) / 2;
     this.targetCy         = (this.H - panelOffsetY) / 2;
-    this.targetMainRadius = Math.min(this.W - panelOffsetX, this.H - panelOffsetY) * (isMobile ? 0.23 : 0.37);
+    this.targetMainRadius = Math.min(this.W - panelOffsetX, this.H - panelOffsetY) * (isMobile ? 0.30 : 0.37);
 
     // First call: snap so nothing starts at 0,0
     if (!this._layoutReady) {
@@ -107,7 +112,7 @@ class CosmicCanvas {
   }
 
   _positionNodes() {
-    const isMobile = this.W <= 640;
+    const isMobile = this.W <= 640 || (this.H <= 500 && this.W <= 1024);
     this.nodes.forEach((n, i) => {
       n.angle  = (i / 12) * Math.PI * 2 - Math.PI / 2;
       n.baseX  = this.cx + this.mainRadius * Math.cos(n.angle);
@@ -139,6 +144,8 @@ class CosmicCanvas {
     });
 
     this.canvas.addEventListener('mouseleave', () => {
+      // Touch browsers fire a synthetic mouseleave after touchend — ignore it
+      if (this._touchMode) return;
       this.mouseX = -9999; this.mouseY = -9999;
       this.hoveredNode = null; this.hoveredSat = null;
       this._collapseSatellites();
@@ -159,6 +166,7 @@ class CosmicCanvas {
 
     this.canvas.addEventListener('touchstart', e => {
       e.preventDefault();
+      this._touchMode = true;
       const t = e.touches[0];
       const r = this.canvas.getBoundingClientRect();
       this.mouseX = t.clientX - r.left;
@@ -174,6 +182,15 @@ class CosmicCanvas {
         this._springCamera(this.hoveredNode.x, this.hoveredNode.y);
       }
     }, { passive: false });
+
+    this.canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const t = e.touches[0];
+      const r = this.canvas.getBoundingClientRect();
+      this.mouseX = t.clientX - r.left;
+      this.mouseY = t.clientY - r.top;
+      this._updateHover();
+    }, { passive: false });
   }
 
   // ─────────────────────────────────────────────
@@ -184,9 +201,10 @@ class CosmicCanvas {
     const mx = this.mouseX, my = this.mouseY;
 
     // Priority 1: satellite hit (generous radius)
+    const isMob = this.W <= 640 || (this.H <= 500 && this.W <= 1024);
     this.hoveredSat = null;
     for (const s of this.satellites) {
-      if (dist(mx, my, s.x, s.y) < s.radius + (this.W <= 640 ? 28 : 16)) {
+      if (dist(mx, my, s.x, s.y) < s.radius + (isMob ? 28 : 16)) {
         this.hoveredSat = s;
         this.canvas.style.cursor = 'pointer';
         return;
@@ -195,7 +213,8 @@ class CosmicCanvas {
 
     // Priority 2: within expanded cluster zone
     if (this.expandedNode) {
-      const clusterR = SATELLITE_RINGS[2].radius * (this.mainRadius / 280) + 60;
+      const nodeR2   = this.expandedNode.radius;
+      const clusterR = Math.max(SATELLITE_RINGS[2].radius * (this.mainRadius / 280), nodeR2 + 80) + 60;
       if (dist(mx, my, this.expandedNode.baseX, this.expandedNode.baseY) < clusterR) {
         // If cursor is over a DIFFERENT root node, switch expansion to it
         for (const n of this.nodes) {
@@ -246,19 +265,23 @@ class CosmicCanvas {
     if (this._collapseTimer) { clearTimeout(this._collapseTimer); this._collapseTimer = null; }
     this.expandedNode = rootNode;
     this.satellites   = [];
-    const isMobile = this.W <= 640;
-    const scale = isMobile ? 0.58 : this.mainRadius / 280;
+    const isMobile = this.W <= 640 || (this.H <= 500 && this.W <= 1024);
+    const scale = this.mainRadius / 280;
+    const nodeR = rootNode.radius; // 18 on mobile, 28 on desktop
+    // Per-ring minimum clearance from node edge (ensures ring 0 is always outside node glow)
+    const ringMins = [nodeR + 24, nodeR + 50, nodeR + 80];
 
     // Fan direction: outward from circle centre for interior nodes;
     // inward (toward circle centre) for boundary nodes whose outer ring
     // tip would leave the visible canvas.
     const outward  = Math.atan2(rootNode.baseY - this.cy, rootNode.baseX - this.cx);
-    const outerR   = SATELLITE_RINGS[2].radius * scale;
+    const outerR   = Math.max(SATELLITE_RINGS[2].radius * scale, ringMins[2]);
     const tipX     = rootNode.baseX + outerR * Math.cos(outward);
     const tipY     = rootNode.baseY + outerR * Math.sin(outward);
-    const edgePad  = 55;
-    const rBound   = this.W - (this.W <= 640 ? edgePad : PANEL_W_DESKTOP + edgePad);
-    const offScreen = tipX < edgePad || tipX > rBound || tipY < edgePad || tipY > (this.H - edgePad);
+    const edgePad  = isMobile ? 40 : 55;
+    const yBound   = this.H - this._panelOffsetY;
+    const rBound   = this.W - (isMobile ? edgePad : PANEL_W_DESKTOP + edgePad);
+    const offScreen = tipX < edgePad || tipX > rBound || tipY < edgePad || tipY > yBound - edgePad;
     const fanAngle  = offScreen
       ? Math.atan2(this.cy - rootNode.baseY, this.cx - rootNode.baseX)  // inward
       : outward;                                                          // outward
@@ -271,7 +294,7 @@ class CosmicCanvas {
       // Tighter arcs reduce bleed onto adjacent Circle-of-Fifths nodes.
       const spread   = ri === 2 ? Math.PI * 1.48 : Math.PI * 1.22;
       const startA   = fanAngle - spread / 2;
-      const rNominal = ring.radius * scale;
+      const rNominal = Math.max(ring.radius * scale, ringMins[ri]);
 
       ring.chords.forEach((chordType, i) => {
         const t     = count > 1 ? i / (count - 1) : 0.5;
@@ -300,9 +323,9 @@ class CosmicCanvas {
 
         // Safety clamp — keep satellites inside the visible canvas area
         const pad = 28;
-        const rightBound = this.W - (this.W <= 640 ? pad : PANEL_W_DESKTOP + pad);
+        const rightBound = this.W - (isMobile ? pad : PANEL_W_DESKTOP + pad);
         x = Math.max(pad, Math.min(rightBound, x));
-        y = Math.max(pad, Math.min(this.H - pad, y));
+        y = Math.max(pad, Math.min(yBound - pad, y));
 
         const hue = (rootNode.hue + ri * 28 + i * 9) % 360;
         this.satellites.push({
@@ -643,19 +666,21 @@ class CosmicCanvas {
   }
 
   _drawOrbitRings(ctx) {
-    const n     = this.expandedNode;
-    const scale = this.mainRadius / 280;
-    const atc   = this._fanAngle ?? 0;
-    const rings = SATELLITE_RINGS;
+    const n        = this.expandedNode;
+    const scale    = this.mainRadius / 280;
+    const nodeR    = n.radius;
+    const ringMins = [nodeR + 24, nodeR + 50, nodeR + 80];
+    const atc      = this._fanAngle ?? 0;
     ctx.save();
-    rings.forEach((ring, ri) => {
+    SATELLITE_RINGS.forEach((ring, ri) => {
       const spread = ri === 2 ? Math.PI * 1.48 : Math.PI * 1.22;
       const startA = atc - spread / 2;
+      const rArc   = Math.max(ring.radius * scale, ringMins[ri]);
       ctx.strokeStyle = `hsla(${n.hue},70%,60%,${0.07 - ri * 0.015})`;
       ctx.lineWidth   = 0.5;
       ctx.setLineDash([3, 9]);
       ctx.beginPath();
-      ctx.arc(n.baseX + (n.pushX ?? 0), n.baseY + (n.pushY ?? 0), ring.radius * scale, startA, startA + spread);
+      ctx.arc(n.baseX + (n.pushX ?? 0), n.baseY + (n.pushY ?? 0), rArc, startA, startA + spread);
       ctx.stroke();
     });
     ctx.setLineDash([]);

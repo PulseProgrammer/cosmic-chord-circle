@@ -75,7 +75,7 @@ class CosmicCanvas {
 
     this.targetCx         = (this.W - panelOffsetX) / 2;
     this.targetCy         = (this.H - panelOffsetY) / 2;
-    this.targetMainRadius = Math.min(this.W - panelOffsetX, this.H - panelOffsetY) * 0.37;
+    this.targetMainRadius = Math.min(this.W - panelOffsetX, this.H - panelOffsetY) * (isMobile ? 0.23 : 0.37);
 
     // First call: snap so nothing starts at 0,0
     if (!this._layoutReady) {
@@ -107,10 +107,12 @@ class CosmicCanvas {
   }
 
   _positionNodes() {
+    const isMobile = this.W <= 640;
     this.nodes.forEach((n, i) => {
-      n.angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
-      n.baseX = this.cx + this.mainRadius * Math.cos(n.angle);
-      n.baseY = this.cy + this.mainRadius * Math.sin(n.angle);
+      n.angle  = (i / 12) * Math.PI * 2 - Math.PI / 2;
+      n.baseX  = this.cx + this.mainRadius * Math.cos(n.angle);
+      n.baseY  = this.cy + this.mainRadius * Math.sin(n.angle);
+      n.radius = isMobile ? 18 : 28;
     });
   }
 
@@ -184,7 +186,7 @@ class CosmicCanvas {
     // Priority 1: satellite hit (generous radius)
     this.hoveredSat = null;
     for (const s of this.satellites) {
-      if (dist(mx, my, s.x, s.y) < s.radius + 16) {
+      if (dist(mx, my, s.x, s.y) < s.radius + (this.W <= 640 ? 28 : 16)) {
         this.hoveredSat = s;
         this.canvas.style.cursor = 'pointer';
         return;
@@ -244,7 +246,8 @@ class CosmicCanvas {
     if (this._collapseTimer) { clearTimeout(this._collapseTimer); this._collapseTimer = null; }
     this.expandedNode = rootNode;
     this.satellites   = [];
-    const scale = this.mainRadius / 280;
+    const isMobile = this.W <= 640;
+    const scale = isMobile ? 0.58 : this.mainRadius / 280;
 
     // Fan direction: outward from circle centre for interior nodes;
     // inward (toward circle centre) for boundary nodes whose outer ring
@@ -261,9 +264,7 @@ class CosmicCanvas {
       : outward;                                                          // outward
     this._fanAngle = fanAngle;
 
-    // On mobile only show triads (ring 0) — outer rings become unreadably tiny
-    const isMobile = this.W <= 640;
-    const rings = isMobile ? SATELLITE_RINGS.slice(0, 1) : SATELLITE_RINGS;
+    const rings = SATELLITE_RINGS;
 
     rings.forEach((ring, ri) => {
       const count  = ring.chords.length;
@@ -280,7 +281,7 @@ class CosmicCanvas {
         // Collision-safe radius: pull the satellite inward if its ray would
         // land inside the glow zone of any other Circle-of-Fifths root node.
         let r = rNominal;
-        const safeMin = 44; // root-node glow clearance in px
+        const safeMin = isMobile ? 0 : 44; // root-node glow clearance in px
         for (const other of this.nodes) {
           if (other === rootNode) continue;
           const dx   = other.baseX - rootNode.baseX;
@@ -306,7 +307,7 @@ class CosmicCanvas {
         const hue = (rootNode.hue + ri * 28 + i * 9) % 360;
         this.satellites.push({
           x, y, baseX: x, baseY: y,
-          radius:   ri === 2 ? 8 : ri === 1 ? 11 : 13,
+          radius:   ri === 2 ? (isMobile ? 7 : 8) : ri === 1 ? (isMobile ? 9 : 11) : (isMobile ? 11 : 13),
           chordType,
           label:    CHORD_TYPES[chordType]?.label ?? chordType,
           color:    `hsl(${hue},80%,65%)`,
@@ -645,7 +646,7 @@ class CosmicCanvas {
     const n     = this.expandedNode;
     const scale = this.mainRadius / 280;
     const atc   = this._fanAngle ?? 0;
-    const rings = this.W <= 640 ? SATELLITE_RINGS.slice(0, 1) : SATELLITE_RINGS;
+    const rings = SATELLITE_RINGS;
     ctx.save();
     rings.forEach((ring, ri) => {
       const spread = ri === 2 ? Math.PI * 1.48 : Math.PI * 1.22;

@@ -167,6 +167,9 @@ class CosmicCanvas {
     this.canvas.addEventListener('touchstart', e => {
       e.preventDefault();
       this._touchMode = true;
+      // Mobile browsers require AudioContext.resume() to be called synchronously
+      // inside a user-gesture handler. Fire-and-forget here so it's ready.
+      if (typeof Tone !== 'undefined') Tone.start().catch(() => {});
       const t = e.touches[0];
       const r = this.canvas.getBoundingClientRect();
       this.mouseX = t.clientX - r.left;
